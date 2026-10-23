@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
@@ -28,11 +29,9 @@ import {
 } from "lucide-react";
 import "./App.css";
 
-
 const API_BASE = (
   import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
 ).replace(/\/+$/, "");
-
 
 const QUICK_PROMPTS = [
   "Prepare for my coding interview",
@@ -40,6 +39,8 @@ const QUICK_PROMPTS = [
   "Build my AI project",
 ];
 
+// Curated LeetCode catalog. Keep problem URLs in this trusted list rather than
+// asking the AI model to invent problem numbers or links.
 const LEETCODE_PROBLEMS = {
   trees: [
     {
@@ -93,35 +94,12 @@ const LEETCODE_PROBLEMS = {
   ],
 };
 
-function getRecommendedProblems(text, availableMinutes) {
+function getRecommendedProblems(text) {
   const normalized = text.toLowerCase();
-  if (/\b(tree|trees|binary tree|bst|traversal|diameter of a tree|height of a tree)\b/.test(normalized) === false) {
-    return { recommended: [], more: [], practiceBudget: 0 };
+  if (/\b(tree|trees|binary tree|bst|traversal|diameter of a tree|height of a tree)\b/.test(normalized)) {
+    return LEETCODE_PROBLEMS.trees;
   }
-
-  const practiceBudget = Math.max(20, Math.floor(availableMinutes * 0.45));
-  const problems = LEETCODE_PROBLEMS.trees;
-  const recommended = [];
-  let plannedMinutes = 0;
-
-  for (const problem of problems) {
-    if (recommended.length >= 2) break;
-    if (plannedMinutes + problem.minutes <= practiceBudget) {
-      recommended.push(problem);
-      plannedMinutes += problem.minutes;
-    }
-  }
-
-  if (recommended.length === 0 && problems.length > 0) {
-    recommended.push(problems[0]);
-  }
-
-  const recommendedIds = new Set(recommended.map((problem) => problem.id));
-  return {
-    recommended,
-    more: problems.filter((problem) => !recommendedIds.has(problem.id)),
-    practiceBudget,
-  };
+  return [];
 }
 
 function formatDate() {
@@ -190,18 +168,10 @@ function App() {
     : 0;
 
   const todayLabel = formatDate();
-  const problemRecommendations = useMemo(
-    () =>
-      getRecommendedProblems(
-        `${request} ${plan?.summary || ""} ${(plan?.tasks || [])
-          .map((task) => `${task.title}${task.description || ""}`)
-          .join(" ")}`,
-        availableMinutes,
-      ),
-    [request, plan, availableMinutes],
+  const recommendedProblems = useMemo(
+    () => getRecommendedProblems(`${request} ${plan?.summary || ""} ${(plan?.tasks || []).map((task) => `${task.title} ${task.description || ""}`).join(" ")}`),
+    [request, plan],
   );
-  const recommendedProblems = problemRecommendations.recommended;
-  const morePracticeProblems = problemRecommendations.more;
 
   async function generatePlan(event) {
     event?.preventDefault();
@@ -877,9 +847,6 @@ function App() {
                         .leetcode-section-heading h3 { margin: 10px 0 6px; font-size: 1.2rem; }
                         .leetcode-section-heading p { margin: 0; color: var(--text-muted, #9292a8); line-height: 1.6; font-size: .9rem; }
                         .leetcode-count { flex: 0 0 auto; padding: 7px 10px; border: 1px solid rgba(167,139,250,.25); border-radius: 10px; color: #c4b5fd; font-size: .8rem; }
-                        .leetcode-subheading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 12px; }
-                        .leetcode-subheading h4 { margin: 0; color: var(--text-primary, #eeeaf7); font-size: 1rem; }
-                        .leetcode-subheading p { margin: 4px 0 0; color: var(--text-muted, #9292a8); font-size: .8rem; line-height: 1.5; }
                         .leetcode-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
                         .leetcode-card { min-width: 0; padding: 17px; border: 1px solid rgba(167,139,250,.18); border-radius: 15px; background: rgba(255,255,255,.018); transition: border-color .2s ease, transform .2s ease; }
                         .leetcode-card:hover { border-color: rgba(167,139,250,.5); transform: translateY(-2px); }
@@ -899,81 +866,36 @@ function App() {
                         @media (max-width: 700px) { .leetcode-grid { grid-template-columns: 1fr; } .leetcode-section-heading { align-items: flex-start; flex-direction: column; } }
                       `}</style>
                       <section className="leetcode-section" aria-labelledby="leetcode-heading">
-                        <div className="leetcode-section-heading">
-                          <div>
-                            <div className="eyebrow">
-                              <span className="eyebrow-dot" /> PRACTICE NEXT
-                            </div>
-                            <h3 id="leetcode-heading">Recommended LeetCode problems</h3>
-                            <p>Matched to your study plan and available time. These are curated links, not AI-invented URLs.</p>
+                      <div className="leetcode-section-heading">
+                        <div>
+                          <div className="eyebrow">
+                            <span className="eyebrow-dot" /> PRACTICE NEXT
                           </div>
-                          <span className="leetcode-count">
-                            {recommendedProblems.length} for now · {morePracticeProblems.length} more
-                          </span>
+                          <h3 id="leetcode-heading">Recommended LeetCode problems</h3>
+                          <p>Curated links matched to your tree study plan. Open a problem in a new tab.</p>
                         </div>
-
-                        <div className="leetcode-subheading">
-                          <div>
-                            <h4>Recommended for this session</h4>
-                            <p>
-                              Estimated practice time: {recommendedProblems.reduce((sum, problem) => sum + problem.minutes, 0)} min
-                              {problemRecommendations.practiceBudget > 0
-                                ? ` · Practice budget: about ${problemRecommendations.practiceBudget} min`
-                                : ""}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="leetcode-grid">
-                          {recommendedProblems.map((problem) => (
-                            <article className="leetcode-card" key={problem.id}>
-                              <div className="leetcode-card-top">
-                                <span className="leetcode-number">#{problem.id}</span>
-                                <span className={`leetcode-difficulty difficulty-${problem.difficulty.toLowerCase()}`}>
-                                  {problem.difficulty}
-                                </span>
-                              </div>
-                              <h4>{problem.title}</h4>
-                              <p className="leetcode-topic">{problem.topic}</p>
-                              <div className="leetcode-card-footer">
-                                <span><Clock3 size={13} /> {problem.minutes} min</span>
-                                <a href={problem.url} target="_blank" rel="noopener noreferrer">
-                                  Open on LeetCode <ArrowUpRight size={14} />
-                                </a>
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-
-                        {morePracticeProblems.length > 0 && (
-                          <>
-                            <div className="leetcode-subheading">
-                              <div>
-                                <h4>More practice</h4>
-                                <p>Try these after completing the session recommendations.</p>
-                              </div>
+                        <span className="leetcode-count">{recommendedProblems.length} problems</span>
+                      </div>
+                      <div className="leetcode-grid">
+                        {recommendedProblems.map((problem) => (
+                          <article className="leetcode-card" key={problem.id}>
+                            <div className="leetcode-card-top">
+                              <span className="leetcode-number">#{problem.id}</span>
+                              <span className={`leetcode-difficulty difficulty-${problem.difficulty.toLowerCase()}`}>
+                                {problem.difficulty}
+                              </span>
                             </div>
-                            <div className="leetcode-grid">
-                              {morePracticeProblems.map((problem) => (
-                                <article className="leetcode-card" key={problem.id}>
-                                  <div className="leetcode-card-top">
-                                    <span className="leetcode-number">#{problem.id}</span>
-                                    <span className={`leetcode-difficulty difficulty-${problem.difficulty.toLowerCase()}`}>
-                                      {problem.difficulty}
-                                    </span>
-                                  </div>
-                                  <h4>{problem.title}</h4>
-                                  <p className="leetcode-topic">{problem.topic}</p>
-                                  <div className="leetcode-card-footer">
-                                    <span><Clock3 size={13} /> {problem.minutes} min</span>
-                                    <a href={problem.url} target="_blank" rel="noopener noreferrer">
-                                      Open on LeetCode <ArrowUpRight size={14} />
-                                    </a>
-                                  </div>
-                                </article>
-                              ))}
+                            <h4>{problem.title}</h4>
+                            <p className="leetcode-topic">{problem.topic}</p>
+                            <div className="leetcode-card-footer">
+                              <span><Clock3 size={13} /> {problem.minutes} min</span>
+                              <a href={problem.url} target="_blank" rel="noopener noreferrer">
+                                Open on LeetCode <ArrowUpRight size={14} />
+                              </a>
                             </div>
-                          </>
-                        )}
+                          </article>
+                        ))}
+                      </div>
                       </section>
                     </>
                   )}
